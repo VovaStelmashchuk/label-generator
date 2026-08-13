@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  app:
+    image: ghcr.io/${IMAGE_NAME}:${COMMIT_SHA}
+    environment:
+      MONGO_URI: ${MONGO_URI}
+      NODE_ENV: production
+    deploy:
+      replicas: 1
+      update_config:
+        order: start-first
+        failure_action: rollback
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      rollback_config:
+        order: start-first
+    networks:
+      - infra_reverse-proxy
+    healthcheck:
+      test: ['CMD', 'curl', '-fsS', 'http://127.0.0.1:3000/api/health']
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+networks:
+  infra_reverse-proxy:
+    external: true

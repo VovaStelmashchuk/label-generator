@@ -1,0 +1,11 @@
+node_modules
+.next
+.git
+.github
+.devcontainer
+npm-debug.log*
+.env
+.env*.local
+README.md
+CLAUDE.md
+docs
