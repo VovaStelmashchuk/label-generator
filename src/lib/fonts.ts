@@ -13,7 +13,8 @@ export type FontId =
   | 'liberation-serif'
   | 'lora'
   | 'jetbrains-mono'
-  | 'ibm-plex-mono';
+  | 'ibm-plex-mono'
+  | 'wallpoet';
 
 export type FontCategory = 'sans' | 'serif' | 'mono';
 
@@ -69,6 +70,12 @@ export const FONTS: readonly FontDefinition[] = [
     name: 'IBM Plex Mono',
     category: 'mono',
     files: { regular: 'IBMPlexMono-Regular.ttf', bold: 'IBMPlexMono-Bold.ttf' },
+  },
+  {
+    id: 'wallpoet',
+    name: 'Wallpoet',
+    category: 'sans',
+    files: { regular: 'Wallpoet-Regular.ttf', bold: 'Wallpoet-Regular.ttf' },
   },
 ] as const;
 

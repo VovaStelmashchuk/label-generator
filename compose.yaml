@@ -11,5 +11,15 @@ services:
     volumes:
       - mongodata:/data/db
 
+  compass:
+    image: haohanyang/compass-web
+    restart: unless-stopped
+    ports:
+      - '8080:8080'
+    environment:
+      CW_MONGO_URI: "mongodb://root:example@mongo:27017/label-generator?authSource=admin"
+    depends_on:
+      - mongo
+
 volumes:
   mongodata:
