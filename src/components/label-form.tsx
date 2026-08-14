@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 
 import dynamic from 'next/dynamic';
 
@@ -19,7 +19,16 @@ import {
 } from '@/components/ui/text-input';
 
 import { FONTS, type FontId } from '@/lib/fonts';
-import { DEFAULT_SPEC, LIMITS, type LabelSpec } from '@/lib/label-spec';
+import {
+  clearSpanRange,
+  DEFAULT_SPEC,
+  LIMITS,
+  normalizeSpans,
+  remapSpans,
+  styleAt,
+  type LabelSpec,
+  type TextSpan,
+} from '@/lib/label-spec';
 import { trackClient } from '@/lib/track-client';
 import { cn } from '@/lib/utils';
 
@@ -39,12 +48,8 @@ const VERTICAL_OPTIONS = [
   { value: 'bottom', icon: 'lucide:align-end-horizontal', label: 'Align bottom' },
 ] as const;
 
-type NumericKey =
-  | 'widthCm'
-  | 'heightCm'
-  | 'fontSizePt'
-  | 'strokeMm'
-  | 'radiusMm';
+/** Fields the plain number inputs write to; text size goes through applyStyle. */
+type NumericKey = 'widthCm' | 'heightCm' | 'strokeMm' | 'radiusMm';
 
 type Status =
   | { kind: 'idle' }
@@ -55,6 +60,16 @@ type Status =
 export function LabelForm() {
   const [spec, setSpec] = useState<LabelSpec>(DEFAULT_SPEC);
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
+  /**
+   * The stretch of text the size and weight controls act on. Kept in state
+   * rather than read on demand, because the textarea loses its selection the
+   * moment focus moves to the control the user is about to touch.
+   */
+  const [selection, setSelection] = useState<{
+    start: number;
+    end: number;
+  } | null>(null);
+  const textRef = useRef<HTMLTextAreaElement>(null);
 
   const update = <K extends keyof LabelSpec>(key: K, value: LabelSpec[K]) => {
     setSpec((current) => ({ ...current, [key]: value }) as LabelSpec);
@@ -69,12 +84,76 @@ export function LabelForm() {
     update(key, parsed);
   };
 
+  const spans = useMemo(
+    () => normalizeSpans(spec.text, spec.spans),
+    [spec.text, spec.spans],
+  );
+
+  /** Style the controls currently display: the selection's, or the label's. */
+  const activeStyle = selection
+    ? styleAt(spec, selection.start)
+    : { sizePt: spec.fontSizePt, bold: spec.bold };
+
+  function rememberSelection(target: HTMLTextAreaElement) {
+    const { selectionStart: start, selectionEnd: end } = target;
+    // A caret is not a selection; collapsing it puts the controls back on the
+    // label as a whole, which is what clicking into the text should do.
+    setSelection(end > start ? { start, end } : null);
+  }
+
+  /** Applies an override to the selection, or to the whole label without one. */
+  function applyStyle(patch: { sizePt?: number; bold?: boolean }) {
+    setStatus({ kind: 'idle' });
+
+    if (!selection) {
+      setSpec((current) => ({
+        ...current,
+        fontSizePt: patch.sizePt ?? current.fontSizePt,
+        bold: patch.bold ?? current.bold,
+      }));
+      return;
+    }
+
+    const { start, end } = selection;
+    setSpec((current) => ({
+      ...current,
+      spans: normalizeSpans(current.text, [
+        ...current.spans,
+        { start, end, ...patch },
+      ]),
+    }));
+
+    // Keep the words highlighted so the next tweak lands on the same stretch.
+    textRef.current?.setSelectionRange(start, end);
+  }
+
+  function changeText(next: string) {
+    setStatus({ kind: 'idle' });
+    // Offsets from before the edit no longer mean anything; the textarea's own
+    // select event will report the new caret straight after this.
+    setSelection(null);
+    setSpec((current) => ({
+      ...current,
+      text: next,
+      spans: remapSpans(current.text, next, current.spans),
+    }));
+  }
+
+  function clearSpan(span: TextSpan) {
+    setStatus({ kind: 'idle' });
+    setSpec((current) => ({
+      ...current,
+      spans: clearSpanRange(current, span.start, span.end),
+    }));
+  }
+
   async function generate() {
     trackClient('click_download_labels', {
       widthCm: spec.widthCm,
       heightCm: spec.heightCm,
       fontId: spec.fontId,
       bold: spec.bold,
+      spanCount: spec.spans.length,
     });
 
     setStatus({ kind: 'working' });
@@ -115,15 +194,42 @@ export function LabelForm() {
           <FieldLabel htmlFor="label-text">Label text</FieldLabel>
           <TextArea
             id="label-text"
+            ref={textRef}
             rows={3}
             maxLength={LIMITS.text.maxLength}
             placeholder="Sugar"
             value={spec.text}
-            onChange={(event) => update('text', event.target.value)}
+            onChange={(event) => changeText(event.target.value)}
+            onSelect={(event) => rememberSelection(event.currentTarget)}
+            onBlur={(event) => rememberSelection(event.currentTarget)}
           />
           <p className="mt-1.5 text-xs text-label-tertiary">
             Long text wraps automatically. Press Enter for a manual line break.
+            Select part of the text to size or bold just that part.
           </p>
+
+          {spans.length > 0 ? (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {spans.map((span) => (
+                <Tag key={`${span.start}-${span.end}`} icon="lucide:type">
+                  <span>
+                    {describeSpan(span, spec)} &middot;{' '}
+                    <span className="text-label-primary">
+                      &ldquo;{excerpt(spec.text, span)}&rdquo;
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={`Reset "${excerpt(spec.text, span)}" to the label style`}
+                    onClick={() => clearSpan(span)}
+                    className="ml-0.5 cursor-pointer rounded-full p-0.5 hover:bg-fill-secondary"
+                  >
+                    <Icon name="lucide:x" className="size-3" />
+                  </button>
+                </Tag>
+              ))}
+            </div>
+          ) : null}
         </div>
 
         <div className="grid grid-cols-2 gap-4">
@@ -179,7 +285,9 @@ export function LabelForm() {
             </SelectInput>
           </div>
           <div>
-            <FieldLabel htmlFor="label-size">Text size (pt)</FieldLabel>
+            <FieldLabel htmlFor="label-size">
+              Text size (pt){selection ? ' — selection' : ''}
+            </FieldLabel>
             <TextInput
               id="label-size"
               type="number"
@@ -187,8 +295,12 @@ export function LabelForm() {
               min={LIMITS.fontSizePt.min}
               max={LIMITS.fontSizePt.max}
               step={LIMITS.fontSizePt.step}
-              value={spec.fontSizePt}
-              onChange={(event) => numberField('fontSizePt', event.target.value)}
+              value={activeStyle.sizePt}
+              onChange={(event) => {
+                const parsed = Number(event.target.value);
+                if (event.target.value === '' || Number.isNaN(parsed)) return;
+                applyStyle({ sizePt: parsed });
+              }}
             />
           </div>
         </div>
@@ -211,14 +323,14 @@ export function LabelForm() {
             />
           </div>
           <div>
-            <FieldLabel>Weight</FieldLabel>
+            <FieldLabel>Weight{selection ? ' — selection' : ''}</FieldLabel>
             <Button
-              variant={spec.bold ? 'primary' : 'ghost'}
+              variant={activeStyle.bold ? 'primary' : 'ghost'}
               size="sm"
               icon="lucide:bold"
-              aria-pressed={spec.bold}
-              className={cn(!spec.bold && 'border-separator-primary')}
-              onClick={() => update('bold', !spec.bold)}
+              aria-pressed={activeStyle.bold}
+              className={cn(!activeStyle.bold && 'border-separator-primary')}
+              onClick={() => applyStyle({ bold: !activeStyle.bold })}
             >
               Bold
             </Button>
@@ -312,6 +424,22 @@ export function LabelForm() {
       </aside>
     </div>
   );
+}
+
+/** Short human description of what a span overrides, e.g. "24pt · Bold". */
+function describeSpan(span: TextSpan, spec: LabelSpec): string {
+  const parts: string[] = [];
+  if (span.sizePt !== undefined) parts.push(`${span.sizePt}pt`);
+  if (span.bold !== undefined && span.bold !== spec.bold) {
+    parts.push(span.bold ? 'Bold' : 'Regular');
+  }
+  return parts.join(' · ') || 'Label style';
+}
+
+/** The span's text, shortened so a long selection cannot stretch the chip. */
+function excerpt(text: string, span: TextSpan): string {
+  const slice = text.slice(span.start, span.end).replace(/\s+/g, ' ').trim();
+  return slice.length > 16 ? `${slice.slice(0, 15)}…` : slice;
 }
 
 function SegmentedControl<T extends string>({

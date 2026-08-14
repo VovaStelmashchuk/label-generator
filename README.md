@@ -18,6 +18,10 @@ section with
 
 - One page, one form: label text, size in cm, font, text size, alignment
   (horizontal and vertical), border stroke width and corner radius.
+- **Style part of the text.** Select a word in the text field and the size and
+  bold controls apply to just that selection — so a price tag can carry small
+  wording above a large number. Each styled stretch shows up as a chip under the
+  field and can be reset from there. Lines grow to fit their biggest glyph.
 - A live preview that measures text with the very same font file the PDF is
   built from, so what you see is what gets printed.
 - Auto-fills an A4 page with the label and tells you how many fit

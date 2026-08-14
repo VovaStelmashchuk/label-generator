@@ -4,21 +4,20 @@ import { useMemo } from 'react';
 
 import { Tag } from '@/components/ui/tag';
 import { useLabelFont } from '@/components/use-label-font';
-import { TEXT_PADDING_MM, type LabelSpec } from '@/lib/label-spec';
-import { planGrid, wrapText } from '@/lib/pdf/layout';
+import { TEXT_PADDING_MM, toStyledRuns, type LabelSpec } from '@/lib/label-spec';
+import { layOutLabelText, planGrid } from '@/lib/pdf/layout';
 import { cmToPt, mmToPt } from '@/lib/pdf/units';
 
 /** Longest side of the preview box, in CSS pixels. */
 const PREVIEW_MAX = 260;
 
 /**
- * Draws a single label at true proportions using the same wrapping, padding and
- * alignment rules as the PDF renderer, with the same TTF loaded into the page.
- * It is a preview, not a proof: printers vary, which is what the calibration
- * sheet is for.
+ * Draws a single label at true proportions by running the very same layout code
+ * the PDF renderer uses, over the very same TTFs. It is a preview, not a proof:
+ * printers vary, which is what the calibration sheet is for.
  */
 export function LabelPreview({ spec }: { spec: LabelSpec }) {
-  const font = useLabelFont(spec.fontId, spec.bold);
+  const font = useLabelFont(spec.fontId);
 
   const widthPt = cmToPt(spec.widthCm);
   const heightPt = cmToPt(spec.heightCm);
@@ -29,57 +28,21 @@ export function LabelPreview({ spec }: { spec: LabelSpec }) {
     [spec.widthCm, spec.heightCm],
   );
 
-  const layout = useMemo(() => {
-    const padding = mmToPt(TEXT_PADDING_MM) + mmToPt(spec.strokeMm);
-    const innerWidth = Math.max(1, widthPt - padding * 2);
-    const innerHeight = Math.max(1, heightPt - padding * 2);
-
-    const lines = wrapText(spec.text, innerWidth, (value) =>
-      font.measure(value, spec.fontSizePt),
-    );
-
-    const lineHeight =
-      (font.ascentRatio + font.descentRatio) * spec.fontSizePt;
-    const blockHeight = lineHeight * lines.length;
-    const ascent = font.ascentRatio * spec.fontSizePt;
-
-    let blockTop: number;
-    switch (spec.verticalAlign) {
-      case 'top':
-        blockTop = padding;
-        break;
-      case 'bottom':
-        blockTop = heightPt - padding - blockHeight;
-        break;
-      default:
-        blockTop = padding + (innerHeight - blockHeight) / 2;
-    }
-
-    const drawn = lines.map((line, index) => {
-      const width = font.measure(line, spec.fontSizePt);
-      let x: number;
-      switch (spec.horizontalAlign) {
-        case 'left':
-          x = padding;
-          break;
-        case 'right':
-          x = padding + innerWidth - width;
-          break;
-        default:
-          x = padding + (innerWidth - width) / 2;
-      }
-      return { line, x, baseline: blockTop + ascent + index * lineHeight };
-    });
-
-    const overflows =
-      blockHeight > innerHeight ||
-      drawn.some((item) => item.x < padding - 0.01);
-
-    return { drawn, overflows };
-    // `font.measure` is recreated every render but is pure, so the spec and the
-    // loaded-font flag are what actually change the result.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [spec, widthPt, heightPt, font.ready, font.ascentRatio, font.descentRatio]);
+  const layout = useMemo(
+    () =>
+      layOutLabelText(
+        toStyledRuns(spec),
+        {
+          widthPt,
+          heightPt,
+          paddingPt: mmToPt(TEXT_PADDING_MM) + mmToPt(spec.strokeMm),
+        },
+        { horizontal: spec.horizontalAlign, vertical: spec.verticalAlign },
+        { sizePt: spec.fontSizePt, bold: spec.bold },
+        font.metrics,
+      ),
+    [spec, widthPt, heightPt, font.metrics],
+  );
 
   const strokePt = mmToPt(spec.strokeMm);
 
@@ -109,18 +72,17 @@ export function LabelPreview({ spec }: { spec: LabelSpec }) {
             />
           ) : null}
 
-          {layout.drawn.map((item, index) => (
+          {layout.fragments.map((fragment, index) => (
             <text
               key={index}
-              x={item.x}
-              y={item.baseline}
+              x={fragment.x}
+              y={fragment.baseline}
               fill="black"
-              fontFamily={`"${font.family}", sans-serif`}
-              fontSize={spec.fontSizePt}
-              fontWeight={spec.bold ? 700 : 400}
+              fontFamily={`"${font.family(fragment.bold)}", sans-serif`}
+              fontSize={fragment.sizePt}
               style={{ whiteSpace: 'pre' }}
             >
-              {item.line}
+              {fragment.text}
             </text>
           ))}
         </svg>

@@ -17,11 +17,14 @@ export function TextInput({
   return <input className={cn(fieldClasses, 'h-12', className)} {...props} />;
 }
 
-/** The same field, taller, for label text that may run to several lines. */
+/**
+ * The same field, taller, for label text that may run to several lines. Takes a
+ * ref so the form can read and restore the user's selection.
+ */
 export function TextArea({
   className,
   ...props
-}: React.ComponentPropsWithoutRef<'textarea'>) {
+}: React.ComponentPropsWithRef<'textarea'>) {
   return (
     <textarea className={cn(fieldClasses, 'resize-y', className)} {...props} />
   );

@@ -7,9 +7,18 @@ import fontkit from '@pdf-lib/fontkit';
 import { PDFDocument, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
 
 import { findFont, type FontId } from '../fonts';
-import { TEXT_PADDING_MM, type LabelSpec } from '../label-spec';
-import { planGrid, wrapText } from './layout';
-import { A4, cmToPt, mmToPt } from './units';
+import {
+  TEXT_PADDING_MM,
+  toStyledRuns,
+  type LabelSpec,
+} from '../label-spec';
+import {
+  layOutLabelText,
+  planGrid,
+  type FontMetrics,
+  type PlacedFragment,
+} from './layout';
+import { A4, mmToPt } from './units';
 
 /** Labels are always printed in pure black - printers dither anything else. */
 const BLACK = rgb(0, 0, 0);
@@ -109,46 +118,36 @@ function drawRoundedRect(
   });
 }
 
-interface TextBlock {
-  lines: string[];
-  lineHeight: number;
-  /** Distance from the top of the text block to the first baseline. */
-  firstBaselineOffset: number;
-  height: number;
-  overflows: boolean;
+/**
+ * A pair of embedded faces plus the measuring functions the layout module wants.
+ * Both faces come from the same family, so a bolded selection keeps its shape.
+ */
+interface EmbeddedFace {
+  regular: PDFFont;
+  bold: PDFFont;
+  metrics: FontMetrics;
 }
 
-function layOutText(
-  spec: LabelSpec,
-  font: PDFFont,
-  innerWidth: number,
-  innerHeight: number,
-): TextBlock {
-  const size = spec.fontSizePt;
-  const measure = (value: string) => font.widthOfTextAtSize(value, size);
-  const lines = wrapText(spec.text, innerWidth, measure);
-
-  const lineHeight = font.heightAtSize(size);
-  // Height measured without the descender is the distance from the top of the
-  // line box down to the baseline.
-  const ascender = font.heightAtSize(size, { descender: false });
-  const height = lineHeight * lines.length;
-
+function faceMetrics(regular: PDFFont, bold: PDFFont): FontMetrics {
+  const pick = (isBold: boolean) => (isBold ? bold : regular);
   return {
-    lines,
-    lineHeight,
-    firstBaselineOffset: ascender,
-    height,
-    overflows:
-      height > innerHeight ||
-      lines.some((line) => measure(line) > innerWidth + 0.01),
+    width: (text, sizePt, isBold) =>
+      pick(isBold).widthOfTextAtSize(text, sizePt),
+    // Height measured without the descender is the distance from the top of the
+    // line box down to the baseline.
+    ascent: (sizePt, isBold) =>
+      pick(isBold).heightAtSize(sizePt, { descender: false }),
+    descent: (sizePt, isBold) =>
+      pick(isBold).heightAtSize(sizePt) -
+      pick(isBold).heightAtSize(sizePt, { descender: false }),
   };
 }
 
 function drawLabel(
   page: PDFPage,
   spec: LabelSpec,
-  font: PDFFont,
+  face: EmbeddedFace,
+  fragments: readonly PlacedFragment[],
   cell: { x: number; y: number },
   size: { width: number; height: number },
 ) {
@@ -161,55 +160,19 @@ function drawLabel(
     strokeWidth: mmToPt(spec.strokeMm),
   });
 
-  if (spec.text.trim() === '') return;
+  const labelTop = cell.y + size.height;
 
-  const padding = mmToPt(TEXT_PADDING_MM) + mmToPt(spec.strokeMm);
-  const innerWidth = Math.max(1, size.width - padding * 2);
-  const innerHeight = Math.max(1, size.height - padding * 2);
-  const block = layOutText(spec, font, innerWidth, innerHeight);
-
-  const innerLeft = cell.x + padding;
-  const innerBottom = cell.y + padding;
-
-  let blockTop: number;
-  switch (spec.verticalAlign) {
-    case 'top':
-      blockTop = innerBottom + innerHeight;
-      break;
-    case 'bottom':
-      blockTop = innerBottom + block.height;
-      break;
-    default:
-      blockTop = innerBottom + (innerHeight + block.height) / 2;
-  }
-
-  block.lines.forEach((line, index) => {
-    if (line === '') return;
-    const width = font.widthOfTextAtSize(line, spec.fontSizePt);
-
-    let x: number;
-    switch (spec.horizontalAlign) {
-      case 'left':
-        x = innerLeft;
-        break;
-      case 'right':
-        x = innerLeft + innerWidth - width;
-        break;
-      default:
-        x = innerLeft + (innerWidth - width) / 2;
-    }
-
-    const baseline =
-      blockTop - block.firstBaselineOffset - index * block.lineHeight;
-
-    page.drawText(line, {
-      x,
-      y: baseline,
-      size: spec.fontSizePt,
-      font,
+  for (const fragment of fragments) {
+    page.drawText(fragment.text, {
+      x: cell.x + fragment.x,
+      // Layout works top-down; PDF user space grows upwards. This is the only
+      // place the two conventions meet.
+      y: labelTop - fragment.baseline,
+      size: fragment.sizePt,
+      font: fragment.bold ? face.bold : face.regular,
       color: BLACK,
     });
-  });
+  }
 }
 
 export interface RenderResult {
@@ -227,24 +190,47 @@ export async function renderLabelSheet(spec: LabelSpec): Promise<RenderResult> {
   pdf.setTitle('Labels');
   pdf.setProducer('label-generator');
 
-  const fontBytes = await readFontFile(spec.fontId, spec.bold);
   // `subset` keeps only the glyphs actually used, which matters because the
   // bundled fonts carry the full Cyrillic range.
-  const font = await pdf.embedFont(new Uint8Array(fontBytes), { subset: true });
+  const embed = async (bold: boolean) =>
+    pdf.embedFont(new Uint8Array(await readFontFile(spec.fontId, bold)), {
+      subset: true,
+    });
+
+  const regular = await embed(false);
+  const definition = findFont(spec.fontId);
+  // Display faces such as Wallpoet point both weights at one file; embedding it
+  // twice would double its bytes in the PDF for no visible difference.
+  const bold =
+    definition && definition.files.bold === definition.files.regular
+      ? regular
+      : await embed(true);
+
+  const face: EmbeddedFace = {
+    regular,
+    bold,
+    metrics: faceMetrics(regular, bold),
+  };
 
   const page = pdf.addPage([A4.widthPt, A4.heightPt]);
   const grid = planGrid(spec.widthCm, spec.heightCm);
 
-  const padding = mmToPt(TEXT_PADDING_MM) + mmToPt(spec.strokeMm);
-  const probe = layOutText(
-    spec,
-    font,
-    Math.max(1, cmToPt(spec.widthCm) - padding * 2),
-    Math.max(1, cmToPt(spec.heightCm) - padding * 2),
+  const layout = layOutLabelText(
+    toStyledRuns(spec),
+    {
+      widthPt: grid.labelWidthPt,
+      heightPt: grid.labelHeightPt,
+      paddingPt: mmToPt(TEXT_PADDING_MM) + mmToPt(spec.strokeMm),
+    },
+    { horizontal: spec.horizontalAlign, vertical: spec.verticalAlign },
+    { sizePt: spec.fontSizePt, bold: spec.bold },
+    face.metrics,
   );
 
+  // Every label on the sheet is identical, so the text is laid out once and the
+  // resulting fragments are stamped into each cell.
   for (const cell of grid.cells) {
-    drawLabel(page, spec, font, cell, {
+    drawLabel(page, spec, face, layout.fragments, cell, {
       width: grid.labelWidthPt,
       height: grid.labelHeightPt,
     });
@@ -255,6 +241,6 @@ export async function renderLabelSheet(spec: LabelSpec): Promise<RenderResult> {
     labelCount: grid.count,
     columns: grid.columns,
     rows: grid.rows,
-    overflows: probe.overflows,
+    overflows: layout.overflows,
   };
 }

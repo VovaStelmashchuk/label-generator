@@ -1,21 +1,18 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { fontFaceId, type FontId } from '@/lib/fonts';
+import type { FontMetrics } from '@/lib/pdf/layout';
 
 /** Size the font is measured at; metrics scale linearly from here. */
 const REFERENCE_SIZE = 100;
 
-export interface FontMetrics {
-  /** CSS font-family name registered for this face. */
-  family: string;
+export interface LabelFont {
+  /** CSS font-family names registered for the two weights. */
+  family: (bold: boolean) => string;
   ready: boolean;
-  /** Ascent and descent as a fraction of the font size. */
-  ascentRatio: number;
-  descentRatio: number;
-  /** Width of `text` at `size`, in the same units as `size`. */
-  measure: (text: string, size: number) => number;
+  metrics: FontMetrics;
 }
 
 const loaded = new Set<string>();
@@ -32,29 +29,42 @@ function measuringContext(): CanvasRenderingContext2D | null {
 }
 
 /**
- * Loads the same TTF the PDF is built from and exposes a measuring function, so
- * the preview wraps and aligns text exactly like the renderer does.
+ * Loads both weights of the same TTF the PDF is built from and exposes them
+ * through the layout module's `FontMetrics` interface, so the preview wraps,
+ * stacks and aligns text with exactly the code the renderer uses.
  */
-export function useLabelFont(fontId: FontId, bold: boolean): FontMetrics {
-  const faceId = fontFaceId(fontId, bold);
-  const family = `lg-${faceId}`;
-  const [ready, setReady] = useState(() => loaded.has(faceId));
+export function useLabelFont(fontId: FontId): LabelFont {
+  const faces = useMemo(
+    () => ({
+      regular: fontFaceId(fontId, false),
+      bold: fontFaceId(fontId, true),
+    }),
+    [fontId],
+  );
+
+  const family = useMemo(
+    () => (bold: boolean) => `lg-${bold ? faces.bold : faces.regular}`,
+    [faces],
+  );
+
+  const [ready, setReady] = useState(
+    () => loaded.has(faces.regular) && loaded.has(faces.bold),
+  );
 
   useEffect(() => {
     let cancelled = false;
 
-    if (loaded.has(faceId)) {
-      setReady(true);
-      return;
-    }
+    const load = async (faceId: string) => {
+      if (loaded.has(faceId)) return;
+      const face = new FontFace(`lg-${faceId}`, `url(/api/fonts/${faceId})`);
+      document.fonts.add(await face.load());
+      loaded.add(faceId);
+    };
 
-    setReady(false);
-    const face = new FontFace(family, `url(/api/fonts/${faceId})`);
-    face
-      .load()
-      .then((result) => {
-        document.fonts.add(result);
-        loaded.add(faceId);
+    setReady(loaded.has(faces.regular) && loaded.has(faces.bold));
+
+    Promise.all([load(faces.regular), load(faces.bold)])
+      .then(() => {
         if (!cancelled) setReady(true);
       })
       .catch(() => {
@@ -65,11 +75,13 @@ export function useLabelFont(fontId: FontId, bold: boolean): FontMetrics {
     return () => {
       cancelled = true;
     };
-  }, [faceId, family]);
+  }, [faces]);
 
-  const [metrics, setMetrics] = useState({
-    ascentRatio: 0.8,
-    descentRatio: 0.2,
+  // Vertical metrics are a property of the face, so they are read once per face
+  // rather than on every measurement.
+  const [vertical, setVertical] = useState({
+    regular: { ascent: 0.8, descent: 0.2 },
+    bold: { ascent: 0.8, descent: 0.2 },
   });
 
   useEffect(() => {
@@ -77,26 +89,38 @@ export function useLabelFont(fontId: FontId, bold: boolean): FontMetrics {
     const context = measuringContext();
     if (!context) return;
 
-    context.font = `${bold ? 'bold ' : ''}${REFERENCE_SIZE}px "${family}"`;
-    const sample = context.measureText('Hg');
-    const ascent =
-      sample.fontBoundingBoxAscent ?? sample.actualBoundingBoxAscent ?? 80;
-    const descent =
-      sample.fontBoundingBoxDescent ?? sample.actualBoundingBoxDescent ?? 20;
+    const read = (bold: boolean) => {
+      context.font = `${REFERENCE_SIZE}px "${family(bold)}"`;
+      const sample = context.measureText('Hg');
+      return {
+        ascent:
+          (sample.fontBoundingBoxAscent ?? sample.actualBoundingBoxAscent) /
+          REFERENCE_SIZE,
+        descent:
+          (sample.fontBoundingBoxDescent ?? sample.actualBoundingBoxDescent) /
+          REFERENCE_SIZE,
+      };
+    };
 
-    setMetrics({
-      ascentRatio: ascent / REFERENCE_SIZE,
-      descentRatio: descent / REFERENCE_SIZE,
-    });
-  }, [ready, family, bold]);
+    setVertical({ regular: read(false), bold: read(true) });
+  }, [ready, family]);
 
-  const measure = (text: string, size: number) => {
-    if (typeof document === 'undefined' || text === '') return 0;
-    const context = measuringContext();
-    if (!context) return 0;
-    context.font = `${bold ? 'bold ' : ''}${REFERENCE_SIZE}px "${family}"`;
-    return (context.measureText(text).width / REFERENCE_SIZE) * size;
-  };
+  const metrics = useMemo<FontMetrics>(
+    () => ({
+      width: (text, sizePt, bold) => {
+        if (text === '' || typeof document === 'undefined') return 0;
+        const context = measuringContext();
+        if (!context) return 0;
+        context.font = `${REFERENCE_SIZE}px "${family(bold)}"`;
+        return (context.measureText(text).width / REFERENCE_SIZE) * sizePt;
+      },
+      ascent: (sizePt, bold) =>
+        (bold ? vertical.bold : vertical.regular).ascent * sizePt,
+      descent: (sizePt, bold) =>
+        (bold ? vertical.bold : vertical.regular).descent * sizePt,
+    }),
+    [family, vertical],
+  );
 
-  return { family, ready, ...metrics, measure };
+  return { family, ready, metrics };
 }

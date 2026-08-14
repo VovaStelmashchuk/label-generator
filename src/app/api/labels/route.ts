@@ -68,6 +68,7 @@ export async function POST(request: Request) {
       fontId: spec.fontId,
       bold: spec.bold,
       textLength: spec.text.length,
+      spanCount: spec.spans.length,
     },
     deviceId,
   );
