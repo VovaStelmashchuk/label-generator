@@ -19,7 +19,6 @@ export default function HomePage() {
         <div className="mt-4 flex flex-wrap gap-2">
           <Tag icon="lucide:file-text">A4, one page</Tag>
           <Tag icon="lucide:printer">Home printer</Tag>
-          <Tag icon="lucide:languages">Latin and Cyrillic</Tag>
         </div>
       </header>
 

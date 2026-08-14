@@ -2,7 +2,7 @@ import { ObjectId } from 'mongodb';
 import { NextResponse } from 'next/server';
 import { Readable } from 'node:stream';
 
-import { ACTIONS, track } from '@/lib/analytics';
+import { track } from '@/lib/analytics';
 import { contentDisposition } from '@/lib/content-disposition';
 import { getPdfBucket } from '@/lib/mongo';
 
@@ -28,7 +28,7 @@ export async function GET(
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  await track(ACTIONS.fileDownloaded, {
+  await track('file_downloaded', {
     fileId: id,
     fileName: file.filename,
     kind: file.metadata?.kind ?? 'unknown',

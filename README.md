@@ -34,6 +34,14 @@ Labels are always pure black on white — deliberately not configurable.
 
 Requires Node 22 and Docker (for MongoDB).
 
+If you use Colima on macOS, you can create and start a dedicated VM for this project:
+
+```sh
+colima start label-generator
+```
+
+Then start the database and the app:
+
 ```sh
 docker compose up -d          # MongoDB on localhost:27017
 cp .env.example .env

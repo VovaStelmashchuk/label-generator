@@ -3,7 +3,7 @@
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef } from 'react';
 
-import { ACTIONS } from '@/lib/analytics-actions';
+
 import { trackClient } from '@/lib/track-client';
 
 /**
@@ -19,7 +19,7 @@ export function PageViewTracker() {
     if (lastTracked.current === pathname) return;
     lastTracked.current = pathname;
 
-    trackClient(ACTIONS.pageView, {
+    trackClient('page_view', {
       path: pathname,
       referrer: document.referrer || null,
       title: document.title,

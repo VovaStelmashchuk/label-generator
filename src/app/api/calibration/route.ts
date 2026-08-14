@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { ACTIONS, track } from '@/lib/analytics';
+import { track } from '@/lib/analytics';
 import { contentDisposition } from '@/lib/content-disposition';
 import {
   CALIBRATION_FILE_NAME,
@@ -17,7 +17,7 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   const bytes = await renderCalibrationSheet();
 
-  await track(ACTIONS.calibrationDownloaded, {
+  await track('calibration_downloaded', {
     fileName: CALIBRATION_FILE_NAME,
   });
 

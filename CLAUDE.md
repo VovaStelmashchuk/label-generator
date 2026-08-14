@@ -40,8 +40,8 @@ an A4 PDF filled with printable labels.
   else and the result looks muddy at label sizes.
 - **Server-only modules** import `server-only` at the top. Anything a client
   component needs (the font catalogue, the action names, the spec type) must live
-  in a module free of Node built-ins — that is why `ACTIONS` sits in
-  `analytics-actions.ts` and not in `analytics.ts`.
+  in a module free of Node built-ins.
+- **Analytics actions**: Always use hardcoded string literals for analytics event action names. Do not use an enum or object (e.g., `ACTIONS`).
 - **Analytics never throws.** `track()` swallows and logs its own errors; a
   broken database must not stop somebody printing.
 - **Design tokens only.** Colours come from the `@theme` block in `globals.css`
@@ -55,7 +55,7 @@ an A4 PDF filled with printable labels.
 One collection, `analytics_events`, with `{ deviceId, action, time, data, country }`.
 `country` is intentionally always `null` — resolving it needs either a header
 from the reverse proxy or a bundled IP database, and neither is set up. Action
-names are enumerated in `src/lib/analytics-actions.ts`.
+names are represented as inline hardcoded strings.
 
 The device id is an anonymous UUID set as the httpOnly cookie `lg_did` by
 `src/middleware.ts` on the first request.

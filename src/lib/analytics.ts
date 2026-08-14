@@ -25,7 +25,7 @@ export interface AnalyticsEvent {
   country: string | null;
 }
 
-export { ACTIONS } from './analytics-actions';
+
 
 export async function currentDeviceId(): Promise<string> {
   const store = await cookies();

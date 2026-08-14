@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { ACTIONS, currentDeviceId, track } from '@/lib/analytics';
+import { currentDeviceId, track } from '@/lib/analytics';
 import { parseSpec, pdfFileName } from '@/lib/label-spec';
 import { getPdfBucket } from '@/lib/mongo';
 import { renderLabelSheet } from '@/lib/pdf/render';
@@ -56,7 +56,7 @@ export async function POST(request: Request) {
   const fileId = upload.id.toString();
 
   await track(
-    ACTIONS.labelsGenerated,
+    'labels_generated',
     {
       fileId,
       fileName,

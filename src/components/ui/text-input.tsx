@@ -5,8 +5,9 @@ import * as React from 'react';
 import { cn } from '@/lib/utils';
 
 const fieldClasses =
-  'w-full rounded-xl border-2 border-accent-primary bg-surface px-3 py-2 text-base ' +
-  'text-label-primary placeholder:text-label-tertiary disabled:opacity-40';
+  'w-full rounded-xl border border-separator-primary bg-surface px-3 py-2 text-base ' +
+  'text-label-primary placeholder:text-label-tertiary disabled:opacity-40 ' +
+  'focus:outline-none focus-visible:outline-none focus:border-transparent';
 
 /** Single-style text input: bold black border, white field. */
 export function TextInput({

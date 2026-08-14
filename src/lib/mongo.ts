@@ -2,10 +2,11 @@ import 'server-only';
 
 import { GridFSBucket, MongoClient, type Db } from 'mongodb';
 
-const DEFAULT_URI = 'mongodb://localhost:27017/label-generator';
-const DEFAULT_DB = 'label-generator';
+const uri = process.env.MONGO_URI;
 
-const uri = process.env.MONGO_URI ?? DEFAULT_URI;
+if (!uri) {
+  throw new Error('MONGO_URI environment variable is not defined');
+}
 
 // The dev server re-evaluates modules on every hot reload; caching the client on
 // globalThis keeps a single connection pool instead of leaking one per reload.
@@ -31,7 +32,10 @@ function databaseName(): string {
   if (process.env.MONGO_DB) return process.env.MONGO_DB;
   // mongodb:// URIs put the database in the path, which may be absent.
   const path = uri.split('?')[0].split('/')[3];
-  return path || DEFAULT_DB;
+  if (!path) {
+    throw new Error('Database name could not be determined. Please set MONGO_DB or include it in MONGO_URI.');
+  }
+  return path;
 }
 
 export async function getDb(): Promise<Db> {

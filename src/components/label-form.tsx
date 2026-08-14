@@ -2,7 +2,12 @@
 
 import { useState } from 'react';
 
-import { LabelPreview } from '@/components/label-preview';
+import dynamic from 'next/dynamic';
+
+const LabelPreview = dynamic(
+  () => import('@/components/label-preview').then((mod) => mod.LabelPreview),
+  { ssr: false }
+);
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Tag } from '@/components/ui/tag';
@@ -12,7 +17,7 @@ import {
   TextArea,
   TextInput,
 } from '@/components/ui/text-input';
-import { ACTIONS } from '@/lib/analytics-actions';
+
 import { FONTS, type FontId } from '@/lib/fonts';
 import { DEFAULT_SPEC, LIMITS, type LabelSpec } from '@/lib/label-spec';
 import { trackClient } from '@/lib/track-client';
@@ -65,7 +70,7 @@ export function LabelForm() {
   };
 
   async function generate() {
-    trackClient(ACTIONS.clickDownloadLabels, {
+    trackClient('click_download_labels', {
       widthCm: spec.widthCm,
       heightCm: spec.heightCm,
       fontId: spec.fontId,
@@ -271,7 +276,7 @@ export function LabelForm() {
             icon="lucide:ruler"
             href="/api/calibration"
             onClick={() =>
-              trackClient(ACTIONS.clickDownloadCalibration, {
+              trackClient('click_download_calibration', {
                 fileName: 'calibration-10x10cm.pdf',
               })
             }
