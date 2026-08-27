@@ -1,28 +1,34 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
+import { Button } from '@/components/ui/button';
 import { Tag } from '@/components/ui/tag';
 import { useLabelFont } from '@/components/use-label-font';
 import { TEXT_PADDING_MM, toStyledRuns, type LabelSpec } from '@/lib/label-spec';
 import { layOutLabelText, planGrid } from '@/lib/pdf/layout';
-import { cmToPt, mmToPt } from '@/lib/pdf/units';
+import { A4, cmToPt, mmToPt } from '@/lib/pdf/units';
 
 /** Longest side of the preview box, in CSS pixels. */
 const PREVIEW_MAX = 260;
 
 /**
- * Draws a single label at true proportions by running the very same layout code
+ * Draws a single label or a full page at true proportions by running the very same layout code
  * the PDF renderer uses, over the very same TTFs. It is a preview, not a proof:
  * printers vary, which is what the calibration sheet is for.
  */
 export function LabelPreview({ spec }: { spec: LabelSpec }) {
   const font = useLabelFont(spec.fontId);
+  const [mode, setMode] = useState<'single' | 'page'>('single');
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const widthPt = cmToPt(spec.widthCm);
   const heightPt = cmToPt(spec.heightCm);
-  const scale = Math.min(PREVIEW_MAX / widthPt, PREVIEW_MAX / heightPt, 3);
-
+  
   const grid = useMemo(
     () => planGrid(spec.widthCm, spec.heightCm),
     [spec.widthCm, spec.heightCm],
@@ -46,45 +52,101 @@ export function LabelPreview({ spec }: { spec: LabelSpec }) {
 
   const strokePt = mmToPt(spec.strokeMm);
 
+  const cellsToRender = useMemo(() => {
+    return spec.maxLabels !== undefined
+      ? grid.cells.slice(0, spec.maxLabels)
+      : grid.cells;
+  }, [grid.cells, spec.maxLabels]);
+
+  const renderLabel = (xOffset: number, yOffset: number) => {
+    return (
+      <g transform={`translate(${xOffset}, ${yOffset})`}>
+        {strokePt > 0 ? (
+          <rect
+            x={strokePt / 2}
+            y={strokePt / 2}
+            width={Math.max(0, widthPt - strokePt)}
+            height={Math.max(0, heightPt - strokePt)}
+            rx={mmToPt(spec.radiusMm)}
+            fill="none"
+            stroke="black"
+            strokeWidth={strokePt}
+          />
+        ) : null}
+
+        {mounted && layout.fragments.map((fragment, index) => (
+          <text
+            key={index}
+            x={fragment.x}
+            y={fragment.baseline}
+            fill="black"
+            fontFamily={`"${font.family(fragment.bold)}", sans-serif`}
+            fontSize={fragment.sizePt}
+            style={{ whiteSpace: 'pre' }}
+          >
+            {fragment.text}
+          </text>
+        ))}
+      </g>
+    );
+  };
+
+  const isSingle = mode === 'single';
+  const scale = isSingle
+    ? Math.min(PREVIEW_MAX / widthPt, PREVIEW_MAX / heightPt, 3)
+    : Math.min(PREVIEW_MAX / A4.widthPt, PREVIEW_MAX / A4.heightPt, 3);
+
+  const svgWidth = isSingle ? widthPt * scale : A4.widthPt * scale;
+  const svgHeight = isSingle ? heightPt * scale : A4.heightPt * scale;
+  const viewBox = isSingle ? `0 0 ${widthPt} ${heightPt}` : `0 0 ${A4.widthPt} ${A4.heightPt}`;
+
   return (
     <div className="flex flex-col items-center gap-3">
+      <div className="flex w-full items-center justify-between">
+        <div className="flex items-center gap-1 rounded-md border border-separator-secondary bg-surface p-1">
+          <Button
+            variant={mode === 'single' ? 'primary' : 'ghost'}
+            size="sm"
+            onClick={() => setMode('single')}
+          >
+            Label
+          </Button>
+          <Button
+            variant={mode === 'page' ? 'primary' : 'ghost'}
+            size="sm"
+            onClick={() => setMode('page')}
+          >
+            Page
+          </Button>
+        </div>
+      </div>
+      
       <div
-        className="flex items-center justify-center rounded-xl border border-separator-secondary bg-surface p-4"
+        className="flex w-full items-center justify-center rounded-md border border-separator-secondary bg-surface p-4"
         style={{ minHeight: PREVIEW_MAX + 32 }}
       >
         <svg
           role="img"
           aria-label={`Preview of the label "${spec.text}"`}
-          width={widthPt * scale}
-          height={heightPt * scale}
-          viewBox={`0 0 ${widthPt} ${heightPt}`}
+          width={svgWidth}
+          height={svgHeight}
+          viewBox={viewBox}
+          className={!isSingle ? 'bg-white shadow-sm ring-1 ring-black/5' : ''}
         >
-          {strokePt > 0 ? (
-            <rect
-              x={strokePt / 2}
-              y={strokePt / 2}
-              width={Math.max(0, widthPt - strokePt)}
-              height={Math.max(0, heightPt - strokePt)}
-              rx={mmToPt(spec.radiusMm)}
-              fill="none"
-              stroke="black"
-              strokeWidth={strokePt}
-            />
-          ) : null}
-
-          {layout.fragments.map((fragment, index) => (
-            <text
-              key={index}
-              x={fragment.x}
-              y={fragment.baseline}
-              fill="black"
-              fontFamily={`"${font.family(fragment.bold)}", sans-serif`}
-              fontSize={fragment.sizePt}
-              style={{ whiteSpace: 'pre' }}
-            >
-              {fragment.text}
-            </text>
-          ))}
+          {isSingle ? (
+            renderLabel(0, 0)
+          ) : (
+            cellsToRender.map((cell, index) => (
+              // grid.cells.y points to the bottom-left corner in PDF space.
+              // In SVG, Y points down, so we need to translate Y from the top.
+              // SVG Y = cell.y (which is calculated bottom-up for PDF? wait!)
+              // Ah, planGrid in layout.ts calculates PDF Y (origin at bottom left).
+              // So SVG Y = A4.heightPt - cell.y - heightPt
+              <g key={index}>
+                {renderLabel(cell.x, A4.heightPt - cell.y - heightPt)}
+              </g>
+            ))
+          )}
         </svg>
       </div>
 
@@ -94,14 +156,14 @@ export function LabelPreview({ spec }: { spec: LabelSpec }) {
         </Tag>
         {grid.count > 0 ? (
           <Tag variant="success" icon="lucide:grid-3x3">
-            {grid.count} per A4 page ({grid.columns} x {grid.rows})
+            {cellsToRender.length} per A4 page ({grid.columns} x {grid.rows})
           </Tag>
         ) : (
           <Tag variant="error" icon="lucide:triangle-alert">
             Does not fit on A4
           </Tag>
         )}
-        {layout.overflows ? (
+        {mounted && layout.overflows ? (
           <Tag variant="error" icon="lucide:triangle-alert">
             Text overflows the label
           </Tag>

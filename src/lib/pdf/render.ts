@@ -229,7 +229,11 @@ export async function renderLabelSheet(spec: LabelSpec): Promise<RenderResult> {
 
   // Every label on the sheet is identical, so the text is laid out once and the
   // resulting fragments are stamped into each cell.
-  for (const cell of grid.cells) {
+  const cellsToRender = spec.maxLabels !== undefined 
+    ? grid.cells.slice(0, spec.maxLabels) 
+    : grid.cells;
+
+  for (const cell of cellsToRender) {
     drawLabel(page, spec, face, layout.fragments, cell, {
       width: grid.labelWidthPt,
       height: grid.labelHeightPt,
@@ -238,7 +242,7 @@ export async function renderLabelSheet(spec: LabelSpec): Promise<RenderResult> {
 
   return {
     bytes: await pdf.save(),
-    labelCount: grid.count,
+    labelCount: cellsToRender.length,
     columns: grid.columns,
     rows: grid.rows,
     overflows: layout.overflows,

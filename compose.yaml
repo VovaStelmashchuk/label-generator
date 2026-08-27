@@ -1,4 +1,31 @@
 services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - ./certs:/certs
+    depends_on:
+      - app
+      - compass
+
+  app:
+    image: node:22-alpine
+    working_dir: /app
+    volumes:
+      - .:/app
+    ports:
+      - '3000:3000'
+    env_file: .env
+    environment:
+      - MONGO_URI=mongodb://root:example@mongo:27017/label-generator?authSource=admin
+    depends_on:
+      - mongo
+    command: sh -c "npm install && npm run dev"
+
   mongo:
     image: mongo:8
     restart: unless-stopped

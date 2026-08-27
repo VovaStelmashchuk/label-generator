@@ -1,13 +1,12 @@
-'use client';
-
-import { Icon as IconifyIcon } from '@iconify/react';
+import { getIconData, iconToSVG } from '@iconify/utils';
+import { icons as lucideJSON } from '@iconify-json/lucide';
 
 import { cn } from '@/lib/utils';
 
 /**
- * Thin wrapper over Iconify so icon names live in one vocabulary and every icon
- * inherits `currentColor` and a consistent size. Names are Iconify ids, e.g.
- * "lucide:download" - the project ships no SVG files of its own.
+ * Thin wrapper over Iconify offline data so icons are server-rendered.
+ * The project only uses 'lucide:' icons, so we bundle @iconify-json/lucide.
+ * Inherits `currentColor` and a consistent size.
  */
 export function Icon({
   name,
@@ -16,11 +15,29 @@ export function Icon({
   name: string;
   className?: string;
 }) {
+  const [prefix, iconName] = name.split(':');
+
+  if (prefix !== 'lucide' || !iconName) {
+    console.warn(`Icon prefix must be 'lucide:', got '${name}'`);
+    return null;
+  }
+
+  const iconData = getIconData(lucideJSON, iconName);
+  if (!iconData) {
+    console.warn(`Icon '${iconName}' not found in lucide collection`);
+    return null;
+  }
+
+  const renderData = iconToSVG(iconData, {
+    height: 'auto', // We control size via tailwind size utility
+  });
+
   return (
-    <IconifyIcon
-      icon={name}
-      aria-hidden
+    <svg
+      {...renderData.attributes}
+      dangerouslySetInnerHTML={{ __html: renderData.body }}
       className={cn('size-[1.15em] shrink-0', className)}
+      aria-hidden
     />
   );
 }

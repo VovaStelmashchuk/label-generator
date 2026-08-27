@@ -2,15 +2,11 @@
 
 import { useMemo, useRef, useState } from 'react';
 
-import dynamic from 'next/dynamic';
-
-const LabelPreview = dynamic(
-  () => import('@/components/label-preview').then((mod) => mod.LabelPreview),
-  { ssr: false }
-);
+import { LabelPreview } from '@/components/label-preview';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Tag } from '@/components/ui/tag';
+import { SegmentedControl } from '@/components/ui/segmented-control';
 import {
   FieldLabel,
   SelectInput,
@@ -49,7 +45,7 @@ const VERTICAL_OPTIONS = [
 ] as const;
 
 /** Fields the plain number inputs write to; text size goes through applyStyle. */
-type NumericKey = 'widthCm' | 'heightCm' | 'strokeMm' | 'radiusMm';
+type NumericKey = 'widthCm' | 'heightCm' | 'strokeMm' | 'radiusMm' | 'maxLabels';
 
 type Status =
   | { kind: 'idle' }
@@ -57,7 +53,7 @@ type Status =
   | { kind: 'error'; message: string }
   | { kind: 'ready'; fileName: string; labelCount: number };
 
-export function LabelForm() {
+export function LabelForm({ isLoggedIn, authUrl }: { isLoggedIn?: boolean; authUrl?: string }) {
   const [spec, setSpec] = useState<LabelSpec>(DEFAULT_SPEC);
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
   /**
@@ -154,6 +150,7 @@ export function LabelForm() {
       fontId: spec.fontId,
       bold: spec.bold,
       spanCount: spec.spans.length,
+      maxLabels: spec.maxLabels,
     });
 
     setStatus({ kind: 'working' });
@@ -177,10 +174,44 @@ export function LabelForm() {
       // A plain navigation to the stored file lets the browser's own download
       // handling take over, and keeps the URL shareable.
       window.location.href = payload.downloadUrl;
+
       setStatus({
         kind: 'ready',
         fileName: payload.fileName,
         labelCount: payload.labelCount,
+      });
+    } catch {
+      setStatus({ kind: 'error', message: 'The server did not answer' });
+    }
+  }
+
+  async function saveLabel() {
+    if (!isLoggedIn && authUrl) {
+      window.location.href = authUrl;
+      return;
+    }
+
+    setStatus({ kind: 'working' });
+    try {
+      const response = await fetch('/api/labels/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(spec),
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        setStatus({
+          kind: 'error',
+          message: payload?.error ?? 'Could not save the label',
+        });
+        return;
+      }
+
+      setStatus({
+        kind: 'ready',
+        fileName: 'Label saved successfully',
+        labelCount: 0,
       });
     } catch {
       setStatus({ kind: 'error', message: 'The server did not answer' });
@@ -222,7 +253,7 @@ export function LabelForm() {
                     type="button"
                     aria-label={`Reset "${excerpt(spec.text, span)}" to the label style`}
                     onClick={() => clearSpan(span)}
-                    className="ml-0.5 cursor-pointer rounded-full p-0.5 hover:bg-fill-secondary"
+                    className="ml-0.5 cursor-pointer rounded-sm p-0.5 hover:bg-fill-secondary"
                   >
                     <Icon name="lucide:x" className="size-3" />
                   </button>
@@ -261,7 +292,7 @@ export function LabelForm() {
           </div>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_120px]">
+        <div className="grid grid-cols-2 gap-4">
           <div>
             <FieldLabel htmlFor="label-font">Font</FieldLabel>
             <SelectInput
@@ -337,7 +368,7 @@ export function LabelForm() {
           </div>
         </div>
 
-        <fieldset className="rounded-xl border border-separator-secondary p-4">
+        <fieldset className="rounded-md border border-separator-secondary p-4">
           <legend className="px-1 text-sm font-medium text-label-secondary">
             Border
           </legend>
@@ -374,6 +405,30 @@ export function LabelForm() {
           </div>
         </fieldset>
 
+        <div>
+          <FieldLabel htmlFor="label-max">Maximum labels per page</FieldLabel>
+          <TextInput
+            id="label-max"
+            type="number"
+            inputMode="numeric"
+            min={LIMITS.maxLabels.min}
+            max={LIMITS.maxLabels.max}
+            step={LIMITS.maxLabels.step}
+            value={spec.maxLabels ?? ''}
+            placeholder="Fill page"
+            onChange={(event) => {
+              if (event.target.value === '') {
+                update('maxLabels', undefined);
+              } else {
+                numberField('maxLabels', event.target.value);
+              }
+            }}
+          />
+          <p className="mt-1.5 text-xs text-label-tertiary">
+            Leave empty to fill the entire A4 page.
+          </p>
+        </div>
+
         <div className="flex flex-wrap items-center gap-3">
           <Button
             icon="lucide:download"
@@ -381,6 +436,15 @@ export function LabelForm() {
             disabled={status.kind === 'working' || spec.text.trim() === ''}
           >
             {status.kind === 'working' ? 'Building PDF...' : 'Download labels'}
+          </Button>
+
+          <Button
+            variant="ghost"
+            icon="lucide:save"
+            onClick={saveLabel}
+            disabled={status.kind === 'working' || spec.text.trim() === ''}
+          >
+            {isLoggedIn ? 'Save Label' : 'Log in to Save'}
           </Button>
 
           <Button
@@ -393,7 +457,7 @@ export function LabelForm() {
               })
             }
           >
-            Download the calibration PDF
+            Download calibration
           </Button>
         </div>
 
@@ -442,28 +506,3 @@ function excerpt(text: string, span: TextSpan): string {
   return slice.length > 16 ? `${slice.slice(0, 15)}…` : slice;
 }
 
-function SegmentedControl<T extends string>({
-  options,
-  value,
-  onChange,
-}: {
-  options: readonly { value: T; icon: string; label: string }[];
-  value: T;
-  onChange: (value: T) => void;
-}) {
-  return (
-    <div className="inline-flex gap-1 rounded-xl border-2 border-accent-primary bg-surface p-1">
-      {options.map((option) => (
-        <Button
-          key={option.value}
-          variant={option.value === value ? 'primary' : 'ghost'}
-          size="sm"
-          icon={option.icon}
-          aria-label={option.label}
-          aria-pressed={option.value === value}
-          onClick={() => onChange(option.value)}
-        />
-      ))}
-    </div>
-  );
-}

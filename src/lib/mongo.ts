@@ -15,7 +15,7 @@ const globalForMongo = globalThis as unknown as {
 };
 
 function connect(): Promise<MongoClient> {
-  return new MongoClient(uri, {
+  return new MongoClient(uri as string, {
     // Fail fast instead of hanging a request for 30s when Mongo is down.
     serverSelectionTimeoutMS: 5000,
   }).connect();
@@ -31,7 +31,7 @@ export function getClient(): Promise<MongoClient> {
 function databaseName(): string {
   if (process.env.MONGO_DB) return process.env.MONGO_DB;
   // mongodb:// URIs put the database in the path, which may be absent.
-  const path = uri.split('?')[0].split('/')[3];
+  const path = (uri as string).split('?')[0].split('/')[3];
   if (!path) {
     throw new Error('Database name could not be determined. Please set MONGO_DB or include it in MONGO_URI.');
   }

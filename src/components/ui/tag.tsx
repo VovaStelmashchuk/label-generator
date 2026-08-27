@@ -5,7 +5,7 @@ import { Icon } from '@/components/ui/icon';
 import { cn } from '@/lib/utils';
 
 const tagVariants = cva(
-  'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium',
+  'inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium',
   {
     variants: {
       variant: {

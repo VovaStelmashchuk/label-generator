@@ -1,0 +1,9 @@
+app.pdf.local.stelmashchuk.dev {
+    tls /certs/app.pdf.local.dev.pem /certs/app.pdf.local.dev-key.pem
+    reverse_proxy app:3000
+}
+
+db.pdf.local.stelmashchuk.dev {
+    tls /certs/app.pdf.local.dev.pem /certs/app.pdf.local.dev-key.pem
+    reverse_proxy compass:8080
+}

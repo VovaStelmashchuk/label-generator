@@ -5,7 +5,7 @@ import * as React from 'react';
 import { cn } from '@/lib/utils';
 
 const fieldClasses =
-  'w-full rounded-xl border border-separator-primary bg-surface px-3 py-2 text-base ' +
+  'w-full rounded-md border border-separator-primary bg-surface px-3 py-2 text-base ' +
   'text-label-primary placeholder:text-label-tertiary disabled:opacity-40 ' +
   'focus:outline-none focus-visible:outline-none focus:border-transparent';
 

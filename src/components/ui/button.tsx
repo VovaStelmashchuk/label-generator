@@ -6,14 +6,9 @@ import * as React from 'react';
 import { Icon } from '@/components/ui/icon';
 import { cn } from '@/lib/utils';
 
-/**
- * Two styles and two sizes, no more. `icon` takes an Iconify name and renders on
- * the left; children are optional, so an icon-only button is just a button with
- * no children (give it an `aria-label` in that case).
- */
 const buttonVariants = cva(
   'inline-flex items-center justify-center gap-2 border-2 font-medium transition-colors ' +
-    'disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer select-none',
+  'disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer select-none',
   {
     variants: {
       variant: {
@@ -23,8 +18,8 @@ const buttonVariants = cva(
           'border-transparent bg-transparent text-label-primary hover:bg-fill-secondary',
       },
       size: {
-        sm: 'h-9 rounded-lg px-3 text-sm',
-        md: 'h-12 rounded-xl px-5 text-base',
+        sm: 'h-9 rounded px-3 text-sm',
+        md: 'h-12 rounded-md px-5 text-base',
       },
       iconOnly: {
         true: '',
@@ -40,34 +35,31 @@ const buttonVariants = cva(
 );
 
 type ButtonBaseProps = VariantProps<typeof buttonVariants> & {
-  /** Iconify icon name rendered before the text, e.g. "lucide:download". */
   icon?: string;
   className?: string;
   children?: React.ReactNode;
+  'aria-label'?: string;
+  'aria-pressed'?: boolean | 'mixed';
 };
 
-type ButtonAsButton = ButtonBaseProps &
-  Omit<React.ComponentPropsWithoutRef<'button'>, 'children' | 'className'> & {
-    href?: undefined;
-  };
+type ButtonAsButton = ButtonBaseProps & {
+  href?: undefined;
+  type?: 'button' | 'submit' | 'reset';
+  onClick?: React.MouseEventHandler<HTMLButtonElement>;
+  disabled?: boolean;
+};
 
-type ButtonAsLink = ButtonBaseProps &
-  Omit<React.ComponentPropsWithoutRef<'a'>, 'children' | 'className'> & {
-    href: string;
-  };
+type ButtonAsLink = ButtonBaseProps & {
+  href: string;
+  target?: React.HTMLAttributeAnchorTarget;
+  rel?: string;
+  onClick?: React.MouseEventHandler<HTMLAnchorElement>;
+};
 
 export type ButtonProps = ButtonAsButton | ButtonAsLink;
 
 export function Button(props: ButtonProps) {
-  const {
-    variant,
-    size,
-    icon,
-    className,
-    children,
-    href,
-    ...rest
-  } = props as ButtonBaseProps & { href?: string } & Record<string, unknown>;
+  const { variant, size, icon, className, children } = props;
 
   const iconOnly = icon !== undefined && children === undefined;
   const classes = cn(buttonVariants({ variant, size, iconOnly }), className);
@@ -79,14 +71,17 @@ export function Button(props: ButtonProps) {
     </>
   );
 
-  if (typeof href === 'string') {
+  if (typeof props.href === 'string') {
     // A plain anchor rather than next/link: the links this button renders point
     // at file downloads, which client-side routing cannot handle.
     return (
       <a
-        href={href}
+        href={props.href}
         className={classes}
-        {...(rest as React.ComponentPropsWithoutRef<'a'>)}
+        target={props.target}
+        rel={props.rel}
+        onClick={props.onClick}
+        aria-label={props['aria-label']}
       >
         {content}
       </a>
@@ -95,9 +90,12 @@ export function Button(props: ButtonProps) {
 
   return (
     <button
-      type="button"
+      type={props.type ?? 'button'}
       className={classes}
-      {...(rest as React.ComponentPropsWithoutRef<'button'>)}
+      disabled={props.disabled}
+      onClick={props.onClick}
+      aria-pressed={props['aria-pressed']}
+      aria-label={props['aria-label']}
     >
       {content}
     </button>

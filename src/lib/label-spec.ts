@@ -46,6 +46,8 @@ export interface LabelSpec {
   strokeMm: number;
   /** Corner radius in millimetres. */
   radiusMm: number;
+  /** Maximum number of labels per page. Optional, defaults to unlimited (fills the page). */
+  maxLabels?: number;
 }
 
 export const LIMITS = {
@@ -55,6 +57,7 @@ export const LIMITS = {
   fontSizePt: { min: 4, max: 96, step: 1 },
   strokeMm: { min: 0, max: 3, step: 0.1 },
   radiusMm: { min: 0, max: 20, step: 0.5 },
+  maxLabels: { min: 1, max: 100, step: 1 },
 } as const;
 
 export const DEFAULT_SPEC: LabelSpec = {
@@ -378,6 +381,15 @@ export function parseSpec(input: unknown): LabelSpec {
       LIMITS.radiusMm.min,
       LIMITS.radiusMm.max,
     ),
+    maxLabels:
+      raw.maxLabels !== undefined && raw.maxLabels !== null && raw.maxLabels !== ''
+        ? num(
+            raw.maxLabels,
+            LIMITS.maxLabels.max,
+            LIMITS.maxLabels.min,
+            LIMITS.maxLabels.max,
+          )
+        : undefined,
   };
 }
 
