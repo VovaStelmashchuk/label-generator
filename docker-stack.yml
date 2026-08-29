@@ -22,6 +22,7 @@ services:
         order: start-first
     networks:
       - infra_reverse-proxy
+      - infra_postgres-net
     healthcheck:
       test: ['CMD', 'curl', '-fsS', 'http://127.0.0.1:3000/api/health']
       interval: 15s
