@@ -1,28 +1,24 @@
-import { ObjectId } from 'mongodb';
 import { NextResponse } from 'next/server';
-import { Readable } from 'node:stream';
 
 import { track } from '@/lib/analytics';
 import { contentDisposition } from '@/lib/content-disposition';
-import { getPdfBucket } from '@/lib/mongo';
+import { FileRecord, fileRepository } from '@/lib/file-repository';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-/** Streams a stored PDF straight out of GridFS. */
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
 
-  if (!ObjectId.isValid(id)) {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidRegex.test(id)) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  const objectId = new ObjectId(id);
-  const bucket = await getPdfBucket();
-  const [file] = await bucket.find({ _id: objectId }).limit(1).toArray();
+  const file: FileRecord | null = await fileRepository.getFileById(id);
 
   if (!file) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -31,17 +27,13 @@ export async function GET(
   await track('file_downloaded', {
     fileId: id,
     fileName: file.filename,
-    kind: file.metadata?.kind ?? 'unknown',
+    contentType: file.content_type
   });
 
-  const stream = Readable.toWeb(
-    bucket.openDownloadStream(objectId),
-  ) as ReadableStream<Uint8Array>;
-
-  return new NextResponse(stream, {
+  return new NextResponse(file.data as unknown as BodyInit, {
     headers: {
-      'Content-Type': file.contentType ?? 'application/pdf',
-      'Content-Length': String(file.length),
+      'Content-Type': file.content_type,
+      'Content-Length': String(file.data.length),
       'Content-Disposition': contentDisposition(file.filename),
       'Cache-Control': 'private, max-age=3600',
     },

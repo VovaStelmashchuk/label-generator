@@ -1,25 +1,40 @@
 import jwt from "jsonwebtoken";
 import { v4 as uuidv4 } from "uuid";
-import { getDb } from "./mongo";
+import { pool, ensureDb } from "./postgres";
 import { NextRequest } from "next/server";
 import { cookies } from "next/headers";
 
 const JWT_SECRET = process.env.JWT_SECRET || "fallback-secret-do-not-use-in-production";
+
+/**
+ * The `userId` claim is the `users.id` UUID, never the Google `sub`. Tokens
+ * issued before that switch carry a numeric Google id, so every entry point
+ * checks the shape and treats a non-UUID as an expired session rather than
+ * letting a `WHERE id = $1` blow up on a bad cast.
+ */
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export interface UserToken {
   tokenId: string;
   expiration: Date;
 }
 
-import type { ObjectId } from "mongodb";
+/**
+ * Whatever the identity provider gave us. Kept as an opaque bag rather than
+ * columns: the app keys off `User.id` and never reads these back, so adding a
+ * second provider costs no schema change.
+ */
+export interface UserMeta {
+  googleId?: string;
+}
 
 export interface User {
-  _id?: ObjectId;
-  googleId: string;
+  id: string;
   email: string;
   name: string;
   roles: string[];
   tokens: UserToken[];
+  meta: UserMeta;
 }
 
 export function generateAuthToken(tokenId: string, userId: string, roles: string[]) {
@@ -29,79 +44,73 @@ export function generateAuthToken(tokenId: string, userId: string, roles: string
 
 export function verifyAuthToken(token: string): { tokenId: string; userId: string; roles: string[] } | null {
   try {
-    return jwt.verify(token, JWT_SECRET) as { tokenId: string; userId: string; roles: string[] };
-  } catch (_error) {
+    const decoded = jwt.verify(token, JWT_SECRET) as { tokenId: string; userId: string; roles: string[] };
+    if (!UUID_PATTERN.test(decoded.userId ?? "")) return null;
+    return decoded;
+  } catch {
     return null;
   }
 }
 
-export async function getUserIdFromRequest(req: NextRequest): Promise<string | null> {
-  const token = req.cookies.get("auth_token")?.value;
+/** Loads the session's user row, or null when the token no longer matches one. */
+async function loadUserByToken(token: string | undefined, columns: string): Promise<Record<string, unknown> | null> {
   if (!token) return null;
 
   const decoded = verifyAuthToken(token);
   if (!decoded) return null;
 
-  const db = await getDb();
-  const user = await db.collection("users").findOne({
-    googleId: decoded.userId,
-    "tokens.tokenId": decoded.tokenId
-  });
+  await ensureDb();
+  const res = await pool.query(
+    `SELECT ${columns} FROM users WHERE id = $1 AND tokens @> $2::jsonb`,
+    [decoded.userId, JSON.stringify([{ tokenId: decoded.tokenId }])]
+  );
 
-  if (!user) return null;
-  return decoded.userId;
+  if ((res.rowCount ?? 0) === 0) return null;
+  return res.rows[0];
+}
+
+export async function getUserIdFromRequest(req: NextRequest): Promise<string | null> {
+  const row = await loadUserByToken(req.cookies.get("auth_token")?.value, "id");
+  return row ? (row.id as string) : null;
 }
 
 export async function getUserIdFromServer(): Promise<string | null> {
   const cookieStore = await cookies();
-  const token = cookieStore.get("auth_token")?.value;
-  if (!token) return null;
-
-  const decoded = verifyAuthToken(token);
-  if (!decoded) return null;
-
-  const db = await getDb();
-  const user = await db.collection("users").findOne({
-    googleId: decoded.userId,
-    "tokens.tokenId": decoded.tokenId
-  });
-
-  if (!user) return null;
-  return decoded.userId;
+  const row = await loadUserByToken(cookieStore.get("auth_token")?.value, "id");
+  return row ? (row.id as string) : null;
 }
 
 export async function getUserFromServer(): Promise<User | null> {
   const cookieStore = await cookies();
-  const token = cookieStore.get("auth_token")?.value;
-  if (!token) return null;
-
-  const decoded = verifyAuthToken(token);
-  if (!decoded) return null;
-
-  const db = await getDb();
-  const user = await db.collection("users").findOne({
-    googleId: decoded.userId,
-    "tokens.tokenId": decoded.tokenId
-  });
-
-  return user as User | null;
+  const row = await loadUserByToken(
+    cookieStore.get("auth_token")?.value,
+    `id, email, name, roles, tokens, meta`
+  );
+  return row ? (row as unknown as User) : null;
 }
 
 export async function deleteSession(token: string): Promise<boolean> {
   const decoded = verifyAuthToken(token);
   if (!decoded) return false;
 
-  const db = await getDb();
-  await db.collection("users").updateOne(
-    { googleId: decoded.userId },
-    { $pull: { tokens: { tokenId: decoded.tokenId } } as unknown as import("mongodb").UpdateFilter<Document> }
+  await ensureDb();
+
+  const res = await pool.query(`SELECT id, tokens FROM users WHERE id = $1`, [decoded.userId]);
+  if ((res.rowCount ?? 0) === 0) return false;
+
+  const user = res.rows[0];
+  const newTokens = (user.tokens || []).filter((t: UserToken) => t.tokenId !== decoded.tokenId);
+
+  await pool.query(
+    `UPDATE users SET tokens = $1::jsonb WHERE id = $2`,
+    [JSON.stringify(newTokens), user.id]
   );
+
   return true;
 }
 
 export async function upsertUserAndCreateSession(googleId: string, email: string, name: string) {
-  const db = await getDb();
-  const usersCollection = db.collection("users");
+  await ensureDb();
 
   const tokenId = uuidv4();
   const expiration = new Date();
@@ -109,28 +118,29 @@ export async function upsertUserAndCreateSession(googleId: string, email: string
 
   const userToken: UserToken = { tokenId, expiration };
 
-  const user = await usersCollection.findOne({ $or: [{ googleId }, { email }] }) as User | null;
+  const meta: UserMeta = { googleId };
+
+  const res = await pool.query(
+    `SELECT id, roles FROM users WHERE meta->>'googleId' = $1 OR email = $2`,
+    [googleId, email]
+  );
+  const user = res.rows[0];
 
   if (!user) {
-    const newUser: User = {
-      googleId,
-      email,
-      name,
-      roles: ["user"],
-      tokens: [userToken],
-    };
-    await usersCollection.insertOne(newUser);
-    return { userId: googleId, tokenId, roles: newUser.roles };
-  } else {
-    // Ensure the user has roles array
-    const roles = user.roles || ["user"];
-    await usersCollection.updateOne(
-      { _id: user._id },
-      {
-        $push: { tokens: userToken } as unknown as import("mongodb").UpdateFilter<Document>,
-        $set: { googleId, roles } // set googleId in case it was missing
-      }
+    const roles = ["user"];
+    const inserted = await pool.query(
+      `INSERT INTO users (email, name, roles, tokens, meta) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [email, name, JSON.stringify(roles), JSON.stringify([userToken]), JSON.stringify(meta)]
     );
-    return { userId: googleId, tokenId, roles };
+    return { userId: inserted.rows[0].id as string, tokenId, roles };
+  } else {
+    const roles = user.roles || ["user"];
+    await pool.query(
+      `UPDATE users
+       SET meta = meta || $1::jsonb, roles = $2::jsonb, tokens = tokens || $3::jsonb
+       WHERE id = $4`,
+      [JSON.stringify(meta), JSON.stringify(roles), JSON.stringify([userToken]), user.id]
+    );
+    return { userId: user.id as string, tokenId, roles };
   }
 }

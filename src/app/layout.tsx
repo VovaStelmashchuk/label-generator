@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 
 import { PageViewTracker } from '@/components/page-view-tracker';
 import { Navigation } from '@/components/navigation';
+import { SocketClient } from '@/components/SocketClient';
 import { getUserFromServer } from '@/lib/auth';
 
 import './globals.css';
@@ -31,6 +32,7 @@ export default async function RootLayout({
           </div>
         </div>
         <PageViewTracker />
+        <SocketClient isLoggedIn={!!user} />
       </body>
     </html>
   );

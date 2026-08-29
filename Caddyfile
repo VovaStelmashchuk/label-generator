@@ -5,5 +5,5 @@ app.pdf.local.stelmashchuk.dev {
 
 db.pdf.local.stelmashchuk.dev {
     tls /certs/app.pdf.local.dev.pem /certs/app.pdf.local.dev-key.pem
-    reverse_proxy compass:8080
+    reverse_proxy pgadmin:80
 }

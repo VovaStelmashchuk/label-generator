@@ -2,14 +2,14 @@ import { NextResponse } from 'next/server';
 
 import { currentDeviceId, track } from '@/lib/analytics';
 import { parseSpec, pdfFileName } from '@/lib/label-spec';
-import { getPdfBucket } from '@/lib/mongo';
 import { renderLabelSheet } from '@/lib/pdf/render';
+import { fileRepository } from '@/lib/file-repository';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /**
- * Renders the sheet, stores it in GridFS and answers with the id to download.
+ * Renders the sheet, stores it in Postgres and answers with the id to download.
  *
  * Generation takes a few tens of milliseconds, so it happens inline; the file
  * is persisted so the resulting link keeps working after the response is gone.
@@ -40,20 +40,15 @@ export async function POST(request: Request) {
 
   const deviceId = await currentDeviceId();
   const fileName = pdfFileName(spec);
-  const bucket = await getPdfBucket();
-
-  const upload = bucket.openUploadStream(fileName, {
-    contentType: 'application/pdf',
-    metadata: { kind: 'labels', spec, deviceId, createdAt: new Date() },
+  
+  const metadata = { kind: 'labels', spec, deviceId, createdAt: new Date() };
+  
+  const fileId = await fileRepository.saveFile({
+    filename: fileName,
+    content_type: 'application/pdf',
+    metadata,
+    data: Buffer.from(result.bytes)
   });
-
-  await new Promise<void>((resolve, reject) => {
-    upload.once('error', reject);
-    upload.once('finish', () => resolve());
-    upload.end(Buffer.from(result.bytes));
-  });
-
-  const fileId = upload.id.toString();
 
   await track(
     'labels_generated',

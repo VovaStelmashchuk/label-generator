@@ -5,18 +5,17 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Tag } from "@/components/ui/tag";
 
-async function logoutAction() {
-  "use server";
-  const cookieStore = await cookies();
-  const token = cookieStore.get("auth_token")?.value;
-  if (token) {
-    await deleteSession(token);
-  }
-  cookieStore.delete("auth_token");
-  redirect("/");
-}
-
 export default async function ProfilePage() {
+  async function logoutAction() {
+    "use server";
+    const cookieStore = await cookies();
+    const token = cookieStore.get("auth_token")?.value;
+    if (token) {
+      await deleteSession(token);
+    }
+    cookieStore.delete("auth_token");
+    redirect("/");
+  }
   const user = await getUserFromServer();
 
   if (!user) {

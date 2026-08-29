@@ -10,10 +10,10 @@ services:
       - ./certs:/certs
     depends_on:
       - app
-      - compass
 
   app:
     image: node:22-alpine
+    restart: unless-stopped
     working_dir: /app
     volumes:
       - .:/app
@@ -21,32 +21,37 @@ services:
       - '3000:3000'
     env_file: .env
     environment:
-      - MONGO_URI=mongodb://root:example@mongo:27017/label-generator?authSource=admin
+      - POSTGRES_URI=postgresql://root:example@postgres:5432/label-generator
+      # The dev compiler builds both the app router and the pages router (the
+      # socket.io handler lives in pages/), which outgrew the VM's default heap
+      # and got the container OOM-killed. Cap the heap so V8 collects instead.
+      - NODE_OPTIONS=--max-old-space-size=2048
     depends_on:
-      - mongo
+      - postgres
     command: sh -c "npm install && npm run dev"
 
-  mongo:
-    image: mongo:8
+  postgres:
+    image: postgres:16-alpine
     restart: unless-stopped
     ports:
-      - '27017:27017'
+      - '5432:5432'
     environment:
-      MONGO_INITDB_ROOT_USERNAME: root
-      MONGO_INITDB_ROOT_PASSWORD: example
-      MONGO_INITDB_DATABASE: label-generator
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: label-generator
     volumes:
-      - mongodata:/data/db
+      - postgresdata:/var/lib/postgresql/data
 
-  compass:
-    image: haohanyang/compass-web
+  pgadmin:
+    image: dpage/pgadmin4
     restart: unless-stopped
     ports:
-      - '8080:8080'
+      - '8081:80'
     environment:
-      CW_MONGO_URI: "mongodb://root:example@mongo:27017/label-generator?authSource=admin"
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin
     depends_on:
-      - mongo
+      - postgres
 
 volumes:
-  mongodata:
+  postgresdata:

@@ -4,7 +4,7 @@ services:
   app:
     image: ghcr.io/${IMAGE_NAME}:${COMMIT_SHA}
     environment:
-      MONGO_URI: ${MONGO_URI}
+      POSTGRES_URI: ${POSTGRES_URI}
       NODE_ENV: production
     deploy:
       replicas: 1

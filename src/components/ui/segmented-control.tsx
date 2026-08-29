@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 
 export interface SegmentedControlOption<T extends string> {
   value: T;
-  icon: string;
+  icon?: string;
   label: string;
 }
 
@@ -29,7 +29,9 @@ export function SegmentedControl<T extends string>({
           aria-label={option.label}
           aria-pressed={option.value === value}
           onClick={() => onChange(option.value)}
-        />
+        >
+          {!option.icon ? option.label : undefined}
+        </Button>
       ))}
     </div>
   );

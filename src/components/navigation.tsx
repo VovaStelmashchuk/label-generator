@@ -10,7 +10,8 @@ export function Navigation({ isLoggedIn, authUrl }: { isLoggedIn: boolean; authU
   const pathname = usePathname();
 
   const links = [
-    { href: '/', label: 'Generator', icon: 'lucide:tag' },
+    { href: '/', label: 'Home', icon: 'lucide:home' },
+    { href: '/generator', label: 'Generator', icon: 'lucide:tag' },
     { href: isLoggedIn ? '/profile' : authUrl, label: isLoggedIn ? 'Profile' : 'Sign In', icon: isLoggedIn ? 'lucide:user' : 'lucide:log-in' },
   ];
 

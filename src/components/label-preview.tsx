@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 
-import { Button } from '@/components/ui/button';
+import { SegmentedControl } from '@/components/ui/segmented-control';
 import { Tag } from '@/components/ui/tag';
 import { useLabelFont } from '@/components/use-label-font';
 import { TEXT_PADDING_MM, toStyledRuns, type LabelSpec } from '@/lib/label-spec';
@@ -103,22 +103,14 @@ export function LabelPreview({ spec }: { spec: LabelSpec }) {
   return (
     <div className="flex flex-col items-center gap-3">
       <div className="flex w-full items-center justify-between">
-        <div className="flex items-center gap-1 rounded-md border border-separator-secondary bg-surface p-1">
-          <Button
-            variant={mode === 'single' ? 'primary' : 'ghost'}
-            size="sm"
-            onClick={() => setMode('single')}
-          >
-            Label
-          </Button>
-          <Button
-            variant={mode === 'page' ? 'primary' : 'ghost'}
-            size="sm"
-            onClick={() => setMode('page')}
-          >
-            Page
-          </Button>
-        </div>
+        <SegmentedControl
+          options={[
+            { value: 'single', label: 'Label' },
+            { value: 'page', label: 'Page' },
+          ]}
+          value={mode}
+          onChange={setMode}
+        />
       </div>
       
       <div

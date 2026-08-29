@@ -53,7 +53,7 @@ type Status =
   | { kind: 'error'; message: string }
   | { kind: 'ready'; fileName: string; labelCount: number };
 
-export function LabelForm({ isLoggedIn, authUrl }: { isLoggedIn?: boolean; authUrl?: string }) {
+export function LabelForm() {
   const [spec, setSpec] = useState<LabelSpec>(DEFAULT_SPEC);
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
   /**
@@ -185,38 +185,6 @@ export function LabelForm({ isLoggedIn, authUrl }: { isLoggedIn?: boolean; authU
     }
   }
 
-  async function saveLabel() {
-    if (!isLoggedIn && authUrl) {
-      window.location.href = authUrl;
-      return;
-    }
-
-    setStatus({ kind: 'working' });
-    try {
-      const response = await fetch('/api/labels/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(spec),
-      });
-
-      if (!response.ok) {
-        const payload = await response.json().catch(() => null);
-        setStatus({
-          kind: 'error',
-          message: payload?.error ?? 'Could not save the label',
-        });
-        return;
-      }
-
-      setStatus({
-        kind: 'ready',
-        fileName: 'Label saved successfully',
-        labelCount: 0,
-      });
-    } catch {
-      setStatus({ kind: 'error', message: 'The server did not answer' });
-    }
-  }
 
   return (
     <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
@@ -357,7 +325,7 @@ export function LabelForm({ isLoggedIn, authUrl }: { isLoggedIn?: boolean; authU
             <FieldLabel>Weight{selection ? ' — selection' : ''}</FieldLabel>
             <Button
               variant={activeStyle.bold ? 'primary' : 'ghost'}
-              size="sm"
+              size="md"
               icon="lucide:bold"
               aria-pressed={activeStyle.bold}
               className={cn(!activeStyle.bold && 'border-separator-primary')}
@@ -438,14 +406,6 @@ export function LabelForm({ isLoggedIn, authUrl }: { isLoggedIn?: boolean; authU
             {status.kind === 'working' ? 'Building PDF...' : 'Download labels'}
           </Button>
 
-          <Button
-            variant="ghost"
-            icon="lucide:save"
-            onClick={saveLabel}
-            disabled={status.kind === 'working' || spec.text.trim() === ''}
-          >
-            {isLoggedIn ? 'Save Label' : 'Log in to Save'}
-          </Button>
 
           <Button
             variant="ghost"

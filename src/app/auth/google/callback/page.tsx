@@ -50,7 +50,7 @@ function CallbackHandler() {
         }
 
         // Force a hard refresh to update server components
-        window.location.href = "/";
+        window.location.href = "/generator";
       } catch (err) {
         setError(`An error occurred during authentication: ${String(err)}`);
       }
