@@ -23,6 +23,9 @@ import { A4, mmToPt } from './units';
 /** Labels are always printed in pure black - printers dither anything else. */
 const BLACK = rgb(0, 0, 0);
 
+/** The cut outline is a guide, not part of the label, so it stays faint. */
+const BORDER_GREY = rgb(0.8, 0.8, 0.8);
+
 const FONT_DIR = path.join(process.cwd(), 'fonts');
 const fontCache = new Map<string, Buffer>();
 
@@ -112,7 +115,7 @@ function drawRoundedRect(
   page.drawSvgPath(svgPath, {
     x: 0,
     y: pageTop,
-    borderColor: BLACK,
+    borderColor: BORDER_GREY,
     borderWidth: strokeWidth,
     scale: 1,
   });

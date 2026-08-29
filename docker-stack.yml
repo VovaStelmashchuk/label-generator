@@ -33,3 +33,6 @@ services:
 networks:
   infra_reverse-proxy:
     external: true
+  infra_postgres-net:
+    external: true
+

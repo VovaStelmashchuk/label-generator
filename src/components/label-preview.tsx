@@ -69,7 +69,7 @@ export function LabelPreview({ spec }: { spec: LabelSpec }) {
             height={Math.max(0, heightPt - strokePt)}
             rx={mmToPt(spec.radiusMm)}
             fill="none"
-            stroke="black"
+            stroke="#cccccc"
             strokeWidth={strokePt}
           />
         ) : null}
