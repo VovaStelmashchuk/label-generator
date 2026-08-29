@@ -57,7 +57,10 @@ jobs:
         run: |
           echo "IMAGE_NAME='${{ env.IMAGE_NAME }}'" >> .env
           echo "COMMIT_SHA='${{ env.COMMIT_SHA }}'" >> .env
-          echo "MONGO_URI='${{ secrets.MONGO_URI }}'" >> .env
+          echo "POSTGRES_URI='${{ secrets.POSTGRES_URI }}'" >> .env
+          echo "JWT_SECRET='${{ secrets.JWT_SECRET }}'" >> .env
+          echo "NEXT_PUBLIC_GOOGLE_CLIENT_ID='${{ vars.PUBLIC_GOOGLE_CLIENT_ID }}'" >> .env
+          echo "NEXT_PUBLIC_BASE_URL='${{ vars.PUBLIC_BASE_URL }}'" >> .env
 
       - name: Deploy the stack
         uses: cssnr/stack-deploy-action@v1

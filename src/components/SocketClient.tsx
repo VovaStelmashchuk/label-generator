@@ -37,7 +37,6 @@ export function SocketClient({ isLoggedIn }: SocketClientProps) {
             console.log("Socket disconnected");
           });
 
-          // Log all messages from the backend
           socket.onAny((eventName, ...args) => {
             console.log(`[Socket Message] ${eventName}:`, ...args);
           });

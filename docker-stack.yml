@@ -5,6 +5,9 @@ services:
     image: ghcr.io/${IMAGE_NAME}:${COMMIT_SHA}
     environment:
       POSTGRES_URI: ${POSTGRES_URI}
+      JWT_SECRET: ${JWT_SECRET}
+      NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID}
+      NEXT_PUBLIC_BASE_URL: ${NEXT_PUBLIC_BASE_URL}
       NODE_ENV: production
     deploy:
       replicas: 1

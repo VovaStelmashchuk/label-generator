@@ -129,11 +129,8 @@ export function LabelPreview({ spec }: { spec: LabelSpec }) {
             renderLabel(0, 0)
           ) : (
             cellsToRender.map((cell, index) => (
-              // grid.cells.y points to the bottom-left corner in PDF space.
-              // In SVG, Y points down, so we need to translate Y from the top.
-              // SVG Y = cell.y (which is calculated bottom-up for PDF? wait!)
-              // Ah, planGrid in layout.ts calculates PDF Y (origin at bottom left).
-              // So SVG Y = A4.heightPt - cell.y - heightPt
+              // planGrid works in PDF space, whose origin is the bottom-left;
+              // SVG's y grows downward, so each cell is flipped about the page.
               <g key={index}>
                 {renderLabel(cell.x, A4.heightPt - cell.y - heightPt)}
               </g>

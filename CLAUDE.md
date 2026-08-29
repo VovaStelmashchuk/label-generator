@@ -52,6 +52,11 @@ Everything that manipulates spans lives in `label-spec.ts`:
 
 ## Conventions
 
+- **Comments explain why, never what.** Only a reason the code cannot state
+  itself earns a comment: an outside constraint, a rejected alternative, a bug
+  being defended against. Delete it and lose nothing? Leave it deleted. Never
+  restate the code, label an obvious block, or narrate the edit that introduced
+  it. See `.agents/rules/comments.md`.
 - **Geometry lives in one place.** The preview and the PDF both call
   `layOutLabelText` from `src/lib/pdf/layout.ts`; it returns placed fragments in
   a top-left, y-down coordinate system, and the PDF renderer flips y exactly

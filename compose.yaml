@@ -22,9 +22,8 @@ services:
     env_file: .env
     environment:
       - POSTGRES_URI=postgresql://root:example@postgres:5432/label-generator
-      # The dev compiler builds both the app router and the pages router (the
-      # socket.io handler lives in pages/), which outgrew the VM's default heap
-      # and got the container OOM-killed. Cap the heap so V8 collects instead.
+      # Dev compiles both routers (the socket.io handler lives in pages/), which
+      # outgrows this VM uncapped - V8 collects rather than getting OOM-killed.
       - NODE_OPTIONS=--max-old-space-size=2048
     depends_on:
       - postgres

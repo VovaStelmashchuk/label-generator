@@ -30,7 +30,6 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
 
-    // Create or update user in database
     const { userId, tokenId, roles } = await upsertUserAndCreateSession(sub, email, name);
 
     const authToken = generateAuthToken(tokenId, userId, roles);
@@ -39,7 +38,7 @@ export async function POST(req: NextRequest) {
     response.cookies.set("auth_token", authToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      maxAge: 30 * 24 * 60 * 60, // 30 days
+      maxAge: 30 * 24 * 60 * 60,
       path: "/",
     });
 

@@ -1,24 +1,50 @@
 import { Pool } from 'pg';
 
-const uri = process.env.POSTGRES_URI;
-
-if (!uri) {
-  throw new Error('POSTGRES_URI environment variable is not defined');
-}
-
 const globalForPg = globalThis as unknown as {
   __labelGeneratorPgPool?: Pool;
 };
 
-export const pool =
-  globalForPg.__labelGeneratorPgPool ??
-  new Pool({
-    connectionString: uri,
-  });
+let created: Pool | undefined;
 
-if (process.env.NODE_ENV !== 'production') {
-  globalForPg.__labelGeneratorPgPool = pool;
+/**
+ * The pool is built on first use, never at import time. `next build` evaluates
+ * every server module while collecting page data, with none of the runtime
+ * environment set - throwing at module scope there fails the image build rather
+ * than the request that actually wanted a database.
+ */
+function getPool(): Pool {
+  if (created) return created;
+
+  if (globalForPg.__labelGeneratorPgPool) {
+    created = globalForPg.__labelGeneratorPgPool;
+    return created;
+  }
+
+  const uri = process.env.POSTGRES_URI;
+  if (!uri) {
+    throw new Error('POSTGRES_URI environment variable is not defined');
+  }
+
+  created = new Pool({ connectionString: uri });
+
+  if (process.env.NODE_ENV !== 'production') {
+    globalForPg.__labelGeneratorPgPool = created;
+  }
+
+  return created;
 }
+
+/**
+ * A lazily-bound stand-in for the pool, so every `pool.query(...)` call site
+ * reads exactly as it would against the real thing.
+ */
+export const pool = new Proxy({} as Pool, {
+  get(_target, prop) {
+    const target = getPool();
+    const value = Reflect.get(target, prop, target);
+    return typeof value === 'function' ? value.bind(target) : value;
+  },
+});
 
 let initPromise: Promise<void> | null = null;
 

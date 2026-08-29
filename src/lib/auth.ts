@@ -4,7 +4,18 @@ import { pool, ensureDb } from "./postgres";
 import { NextRequest } from "next/server";
 import { cookies } from "next/headers";
 
-const JWT_SECRET = process.env.JWT_SECRET || "fallback-secret-do-not-use-in-production";
+/**
+ * Resolved per call, never at module scope: `next build` evaluates this module
+ * with NODE_ENV=production and none of the runtime environment, so throwing on
+ * import would fail the image build. In production a missing secret is fatal -
+ * silently falling back would let anyone mint a valid session token.
+ */
+function jwtSecret(): string {
+  const secret = process.env.JWT_SECRET;
+  if (secret) return secret;
+
+  throw new Error("JWT_SECRET environment variable is not defined");
+}
 
 /**
  * The `userId` claim is the `users.id` UUID, never the Google `sub`. Tokens
@@ -38,13 +49,12 @@ export interface User {
 }
 
 export function generateAuthToken(tokenId: string, userId: string, roles: string[]) {
-  // Using jsonwebtoken to generate a token with token_id, roles, and user id
-  return jwt.sign({ tokenId, roles, userId }, JWT_SECRET, { expiresIn: "30d" });
+  return jwt.sign({ tokenId, roles, userId }, jwtSecret(), { expiresIn: "30d" });
 }
 
 export function verifyAuthToken(token: string): { tokenId: string; userId: string; roles: string[] } | null {
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { tokenId: string; userId: string; roles: string[] };
+    const decoded = jwt.verify(token, jwtSecret()) as { tokenId: string; userId: string; roles: string[] };
     if (!UUID_PATTERN.test(decoded.userId ?? "")) return null;
     return decoded;
   } catch {
@@ -114,7 +124,7 @@ export async function upsertUserAndCreateSession(googleId: string, email: string
 
   const tokenId = uuidv4();
   const expiration = new Date();
-  expiration.setDate(expiration.getDate() + 30); // 30 days from now
+  expiration.setDate(expiration.getDate() + 30);
 
   const userToken: UserToken = { tokenId, expiration };
 

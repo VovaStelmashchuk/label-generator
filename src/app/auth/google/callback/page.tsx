@@ -14,7 +14,6 @@ function CallbackHandler() {
     const googleAccessToken = hashParams.get("access_token");
 
     if (!googleAccessToken) {
-      // Check query params for error just in case
       const searchParams = new URLSearchParams(window.location.search);
       if (searchParams.get("error")) {
         setError(searchParams.get("error"));
