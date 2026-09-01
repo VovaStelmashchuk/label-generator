@@ -86,8 +86,18 @@ export async function ensureDb() {
         action TEXT NOT NULL,
         time TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
         data JSONB NOT NULL,
-        country TEXT
+        ip TEXT
       );
+
+      DO $$
+      BEGIN
+        IF EXISTS(SELECT 1
+          FROM information_schema.columns
+          WHERE table_name='analytics_events' and column_name='country')
+        THEN
+            ALTER TABLE analytics_events RENAME COLUMN country TO ip;
+        END IF;
+      END $$;
     `).then(() => { });
   }
   return initPromise;

@@ -1,7 +1,7 @@
 import 'server-only';
 
 import { after } from 'next/server';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 
 import { DEVICE_COOKIE } from './device';
 import { pool, ensureDb } from './postgres';
@@ -24,10 +24,9 @@ export interface AnalyticsEvent {
   time: Date;
   data: Record<string, unknown>;
   /**
-   * Reserved for IP-derived geography. Left null for now: resolving it needs
-   * either a header from the reverse proxy or a bundled IP database.
+   * User's IP address derived from the reverse proxy header.
    */
-  country: string | null;
+  ip: string | null;
 }
 
 
@@ -58,6 +57,14 @@ export async function track(
   const resolvedDeviceId = deviceId ?? (await currentDeviceId());
   const userId = await currentUserId().catch(() => null);
 
+  let ip: string | null = null;
+  try {
+    const headersList = await headers();
+    ip = headersList.get('x-forwarded-for')?.split(',')[0].trim() || null;
+  } catch (error) {
+    // Context may not have headers available
+  }
+
   after(async () => {
     try {
       const event: AnalyticsEvent = {
@@ -66,13 +73,13 @@ export async function track(
         action,
         time: new Date(),
         data,
-        country: null,
+        ip,
       };
 
       await ensureDb();
       await pool.query(
-        `INSERT INTO analytics_events (device_id, user_id, action, time, data, country) VALUES ($1, $2, $3, $4, $5, $6)`,
-        [event.deviceId, event.userId, event.action, event.time, JSON.stringify(event.data), event.country]
+        `INSERT INTO analytics_events (device_id, user_id, action, time, data, ip) VALUES ($1, $2, $3, $4, $5, $6)`,
+        [event.deviceId, event.userId, event.action, event.time, JSON.stringify(event.data), event.ip]
       );
     } catch (error) {
       console.error('[analytics] failed to record %s', action, error);
