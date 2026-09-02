@@ -87,22 +87,6 @@ export async function ensureDb() {
         ip INET
       );
 
-      DO $$
-      BEGIN
-        IF EXISTS(SELECT 1
-          FROM information_schema.columns
-          WHERE table_name='analytics_events' and column_name='country')
-        THEN
-            ALTER TABLE analytics_events RENAME COLUMN country TO ip;
-        END IF;
-
-        IF EXISTS(SELECT 1
-          FROM information_schema.columns
-          WHERE table_name='analytics_events' and column_name='ip' and data_type='text')
-        THEN
-            ALTER TABLE analytics_events ALTER COLUMN ip TYPE INET USING ip::inet;
-        END IF;
-      END $$;
     `).then(() => { });
   }
   return initPromise;
