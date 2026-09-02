@@ -61,9 +61,7 @@ export async function ensureDb() {
       );
 
       -- Created before analytics_events, which points its user_id at it.
-      -- A user is identified by id alone; meta carries whatever the identity
-      -- provider handed us (currently just googleId), which the app never
-      -- treats as a key outside of matching a returning sign-in.
+      -- A user is identified by id alone; 
       CREATE TABLE IF NOT EXISTS users (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         email TEXT UNIQUE NOT NULL,
@@ -86,7 +84,7 @@ export async function ensureDb() {
         action TEXT NOT NULL,
         time TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
         data JSONB NOT NULL,
-        ip TEXT
+        ip INET
       );
 
       DO $$
@@ -96,6 +94,13 @@ export async function ensureDb() {
           WHERE table_name='analytics_events' and column_name='country')
         THEN
             ALTER TABLE analytics_events RENAME COLUMN country TO ip;
+        END IF;
+
+        IF EXISTS(SELECT 1
+          FROM information_schema.columns
+          WHERE table_name='analytics_events' and column_name='ip' and data_type='text')
+        THEN
+            ALTER TABLE analytics_events ALTER COLUMN ip TYPE INET USING ip::inet;
         END IF;
       END $$;
     `).then(() => { });
